@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  /* Core palette */
+  --ink:        #0E0E10;
+  --surface:    #141416;
+  --panel:      #1C1C20;
+  --border:     #2A2A30;
+  --muted:      #3A3A42;
+  --dim:        #7A7A88;
+  --body:       #C8C8D4;
+  --heading:    #EEEEF4;
+
+  /* Accent — warm amber, like a spectrogram peak */
+  --accent:     #F5A623;
+  --accent-dim: #C47D10;
+  --accent-glow:rgba(245,166,35,0.18);
+
+  /* Semantic */
+  --good:       #3DD68C;
+  --warn:       #F5A623;
+  --bad:        #F05252;
+  --good-bg:    rgba(61,214,140,0.10);
+  --bad-bg:     rgba(240,82,82,0.10);
+  --warn-bg:    rgba(245,166,35,0.10);
+
+  /* Type scale — fonts loaded via <link> in layout.tsx */
+  --font-display: 'Syne', 'Space Grotesk', system-ui, sans-serif;
+  --font-body:    'DM Sans', 'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--ink);
+  color: var(--body);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--ink);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

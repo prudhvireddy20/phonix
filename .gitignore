@@ -1,0 +1,95 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# .gitignore — Phonix
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Secrets & Environment Variables (CONFIDENTIAL) ────────────────────────────
+.env
+.env.*
+.env.local
+.env.*.local
+*.env
+
+# ── TLS / SSL Certificates (CONFIDENTIAL) ────────────────────────────────────
+infra/nginx/certs/
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# ── API Keys / Credentials (CONFIDENTIAL) ────────────────────────────────────
+# Never commit files that may contain tokens or secrets
+*.secret
+*credentials*
+*token*
+
+# ── Python ────────────────────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+*.cover
+
+# ── Node.js / Next.js ────────────────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Whisper / ML Model Cache ─────────────────────────────────────────────────
+# Large model files should not be committed
+*.bin
+*.pt
+*.onnx
+*.ctranslate2
+whisper_cache/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+# Docker volume data (if mounted locally)
+docker-data/
+minio_data/
+postgres_data/
+
+# ── IDE / Editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Desktop.ini
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.temp

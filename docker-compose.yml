@@ -1,0 +1,162 @@
+version: "3.9"
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  phonix:
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  minio_data:       # audio uploads — ephemeral by design, purged every hour
+  postgres_data:    # audit log — retained for DPDP compliance
+  whisper_cache:    # faster-whisper model cache — survives restarts
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ── MinIO (S3-compatible, fully on-premise object storage) ────────────────
+  minio:
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+    container_name: phonix_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-phonix}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-phonix_secret_change_me}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # MinIO console (disable in prod)
+    networks:
+      - phonix
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MinIO bucket bootstrap ─────────────────────────────────────────────────
+  # Runs once to create the audio-uploads bucket and set a lifecycle rule
+  # that auto-deletes objects older than 1 hour (belt-and-suspenders DPDP).
+  minio_init:
+    image: minio/mc:RELEASE.2024-11-05T11-29-45Z
+    container_name: phonix_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - phonix
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ROOT_USER:-phonix}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-phonix_secret_change_me}
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+        mc mb --ignore-existing local/audio-uploads &&
+        mc anonymous set none local/audio-uploads &&
+        mc ilm add --expiry-days 1 local/audio-uploads &&
+        echo 'MinIO bucket ready.'
+      "
+    restart: "no"
+
+  # ── PostgreSQL (audit log) ─────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: phonix_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-phonix}
+      POSTGRES_USER:     ${POSTGRES_USER:-phonix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-phonix_pg_change_me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - phonix
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-phonix} -d ${POSTGRES_DB:-phonix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: phonix_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio_init:
+        condition: service_completed_successfully
+    environment:
+      # MinIO
+      MINIO_ENDPOINT:        minio:9000
+      MINIO_ACCESS_KEY:      ${MINIO_ROOT_USER:-phonix}
+      MINIO_SECRET_KEY:      ${MINIO_ROOT_PASSWORD:-phonix_secret_change_me}
+      MINIO_BUCKET:          audio-uploads
+      MINIO_SECURE:          "false"   # TLS terminated by nginx outside Docker
+      # Postgres
+      POSTGRES_DSN:          postgresql://${POSTGRES_USER:-phonix}:${POSTGRES_PASSWORD:-phonix_pg_change_me}@postgres:5432/${POSTGRES_DB:-phonix}
+      # OpenRouter (LLM feedback — optional, scoring works without it)
+      OPENROUTER_API_KEY:    ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL:      ${OPENROUTER_MODEL:-google/gemini-2.5-flash}
+      # Whisper
+      WHISPER_MODEL_SIZE:    ${WHISPER_MODEL_SIZE:-base}
+      WHISPER_DEVICE:        cpu
+      WHISPER_COMPUTE_TYPE:  int8
+      WHISPER_LANGUAGE:      en
+      # App
+      ALLOWED_ORIGINS:       ${ALLOWED_ORIGINS:-http://localhost:3000}
+      MINIO_PUBLIC_URL:      ${MINIO_PUBLIC_URL:-http://localhost/storage}
+      PORT:                  8000
+    volumes:
+      - whisper_cache:/root/.cache/huggingface
+    networks:
+      - phonix
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Next.js frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-}
+    container_name: phonix_frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      BACKEND_URL:             http://api:8000
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-}
+      NODE_ENV:                production
+    networks:
+      - phonix
+
+  # ── Nginx reverse proxy ────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: phonix_nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro   # mount your TLS certs here
+    networks:
+      - phonix

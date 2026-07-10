@@ -1,0 +1,13 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+slowapi==0.1.9
+httpx==0.27.2
+faster-whisper==1.1.0
+requests>=2.31.0
+Levenshtein==0.26.1
+phonemizer==3.3.0
+pydantic==2.10.3
+asyncpg==0.30.0
+minio==7.2.11
+pytest==8.3.4
+pytest-asyncio==0.24.0

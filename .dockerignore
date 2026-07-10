@@ -1,0 +1,60 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# .dockerignore — Phonix (root level)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Secrets & Environment Variables (CONFIDENTIAL) ────────────────────────────
+.env
+.env.*
+.env.local
+.env.*.local
+
+# ── TLS / SSL Certificates (CONFIDENTIAL) ────────────────────────────────────
+infra/nginx/certs/
+*.pem
+*.key
+*.crt
+*.cert
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Python ────────────────────────────────────────────────────────────────────
+.venv/
+venv/
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# ── Node.js / Next.js ────────────────────────────────────────────────────────
+node_modules
+frontend/node_modules
+frontend/.next
+npm-debug.log*
+
+# ── IDE / Editor ──────────────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+
+# ── Documentation / non-build files ──────────────────────────────────────────
+README.md
+*.md
+LICENSE
+
+# ── Docker (avoid recursive copies) ──────────────────────────────────────────
+docker-compose.yml
+docker-compose*.yml
+Dockerfile
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
