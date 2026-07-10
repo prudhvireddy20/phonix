@@ -2,7 +2,7 @@
 Dependency injection — wires concrete adapters into use cases.
 FastAPI routes call get_presign_uc() / get_analyze_uc() via Depends().
 
-Storage  : MinIO (on-premise S3)   — no third-party storage sub-processor
+Storage  : MinIO (Docker) or LocalStorage (cloud) — auto-detected
 Audit    : Postgres (asyncpg)       — full data sovereignty
 Whisper  : faster-whisper (on-device) — no OPENAI_API_KEY needed
 Feedback : OpenRouter (streaming, OpenAI-compatible gateway)
@@ -13,18 +13,26 @@ import os
 from functools import lru_cache
 
 from app.adapters.openrouter_adapter import OpenRouterAdapter
-from app.adapters.storage_adapter import MinioStorageAdapter, PostgresAuditAdapter
+from app.adapters.storage_adapter import PostgresAuditAdapter
 from app.adapters.whisper_adapter import FasterWhisperAdapter
 from app.application.use_cases import AnalyzeUseCase, PresignUseCase
 
+# Auto-detect storage mode: MinIO if env vars present, otherwise local temp files
+_USE_MINIO = bool(os.getenv("MINIO_ENDPOINT"))
+
 _REQUIRED_ENV = [
-    "MINIO_ENDPOINT",
-    "MINIO_ACCESS_KEY",
-    "MINIO_SECRET_KEY",
-    "MINIO_BUCKET",
     "POSTGRES_DSN",
     "ALLOWED_ORIGINS",
 ]
+
+# Only require MinIO env vars if MinIO mode is active
+if _USE_MINIO:
+    _REQUIRED_ENV.extend([
+        "MINIO_ENDPOINT",
+        "MINIO_ACCESS_KEY",
+        "MINIO_SECRET_KEY",
+        "MINIO_BUCKET",
+    ])
 
 
 def check_env() -> list[str]:
@@ -35,8 +43,13 @@ def check_env() -> list[str]:
 # ── Singleton adapters (one instance per process) ─────────────────────────────
 
 @lru_cache(maxsize=1)
-def _storage() -> MinioStorageAdapter:
-    return MinioStorageAdapter()
+def _storage():
+    if _USE_MINIO:
+        from app.adapters.storage_adapter import MinioStorageAdapter
+        return MinioStorageAdapter()
+    else:
+        from app.adapters.local_storage_adapter import LocalStorageAdapter
+        return LocalStorageAdapter()
 
 
 @lru_cache(maxsize=1)

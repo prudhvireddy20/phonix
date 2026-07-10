@@ -21,46 +21,32 @@ export function useAnalysis(backendUrl: string) {
       abortRef.current = controller;
 
       try {
-        // ── Step 1: Get presigned URL ──────────────────────────────────────
+        // ── Step 1: Upload audio directly to the backend ─────────────────
         setState({ status: "uploading", progress: 0 });
 
-        const presignRes = await fetch(`${backendUrl}/api/presign`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            consent: {
-              essential_processing: consent.essential,
-              analytics_consent:    consent.analytics,
-            },
-            mime_type: audio.file.type || "audio/webm",
-          }),
-          signal: controller.signal,
-        });
+        const formData = new FormData();
+        formData.append("file", audio.file);
+        formData.append("consent_essential", String(consent.essential));
+        formData.append("consent_analytics", String(consent.analytics));
 
-        if (!presignRes.ok) {
-          const err = await presignRes.json().catch(() => ({}));
-          throw new Error(err.detail || `Presign failed (${presignRes.status})`);
-        }
-
-        const { upload_url, file_key } = await presignRes.json();
-
-        // ── Step 2: PUT audio directly to Supabase Storage ────────────────
         setState({ status: "uploading", progress: 30 });
 
-        const putRes = await fetch(upload_url, {
-          method: "PUT",
-          headers: { "Content-Type": audio.file.type || "audio/webm" },
-          body: audio.file,
+        const uploadRes = await fetch(`${backendUrl}/api/upload`, {
+          method: "POST",
+          body: formData,
           signal: controller.signal,
         });
 
-        if (!putRes.ok) {
-          throw new Error(`Upload failed (${putRes.status})`);
+        if (!uploadRes.ok) {
+          const err = await uploadRes.json().catch(() => ({}));
+          throw new Error(err.detail || `Upload failed (${uploadRes.status})`);
         }
+
+        const { file_key } = await uploadRes.json();
 
         setState({ status: "uploading", progress: 85 });
 
-        // ── Step 3: Trigger analysis pipeline (SSE stream) ────────────────
+        // ── Step 2: Trigger analysis pipeline (SSE stream) ────────────────
         setState({ status: "analyzing", partialFeedback: "" });
 
         const analyzeRes = await fetch(`${backendUrl}/api/analyze`, {
@@ -75,7 +61,7 @@ export function useAnalysis(backendUrl: string) {
           throw new Error(err.detail || `Analysis failed (${analyzeRes.status})`);
         }
 
-        // ── Step 4: Parse SSE event stream ────────────────────────────────
+        // ── Step 3: Parse SSE event stream ────────────────────────────────
         let transcript     = "";
         let overallScore   = 0;
         let feedbackText   = "";

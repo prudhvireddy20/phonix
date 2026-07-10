@@ -8,6 +8,7 @@
 .env.local
 .env.*.local
 *.env
+!.env.example
 
 # ── TLS / SSL Certificates (CONFIDENTIAL) ────────────────────────────────────
 infra/nginx/certs/
@@ -93,3 +94,4 @@ logs/
 *.bak
 *.tmp
 *.temp
+*.pdf

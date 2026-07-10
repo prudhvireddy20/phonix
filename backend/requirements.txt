@@ -9,5 +9,6 @@ phonemizer==3.3.0
 pydantic==2.10.3
 asyncpg==0.30.0
 minio==7.2.11
+python-multipart==0.0.18
 pytest==8.3.4
 pytest-asyncio==0.24.0

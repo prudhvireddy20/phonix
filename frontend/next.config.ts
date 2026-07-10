@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Required for the Docker multi-stage build — copies only the minimal
-  // production server into the runtime image (~50MB instead of ~300MB).
-  output: "standalone",
+  // Use "standalone" for Docker, default for Cloudflare Pages / Vercel.
+  // The DEPLOY_TARGET env var controls this at build time.
+  ...(process.env.DEPLOY_TARGET === "docker" ? { output: "standalone" } : {}),
 
   // Silence hydration noise from browser extensions in dev
   reactStrictMode: true,

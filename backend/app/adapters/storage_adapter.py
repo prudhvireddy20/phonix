@@ -139,17 +139,36 @@ class PostgresAuditAdapter(AuditPort):
     """
 
     def __init__(self) -> None:
-        self._dsn  = os.environ["POSTGRES_DSN"]
+        raw_dsn = os.environ["POSTGRES_DSN"]
+        # Strip query parameters that asyncpg doesn't support natively
+        # (e.g. sslmode=require, channel_binding=require from Neon)
+        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+        parsed = urlparse(raw_dsn)
+        params = parse_qs(parsed.query)
+        # Detect if SSL is required
+        self._use_ssl = params.get("sslmode", ["prefer"])[0] in ("require", "verify-full", "verify-ca")
+        # Remove params asyncpg handles via kwargs, not DSN
+        for key in ("sslmode", "channel_binding"):
+            params.pop(key, None)
+        clean_query = urlencode(params, doseq=True)
+        self._dsn = urlunparse(parsed._replace(query=clean_query))
         self._pool: asyncpg.Pool | None = None
 
     async def _get_pool(self) -> asyncpg.Pool:
         if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self._dsn,
-                min_size=1,
-                max_size=5,
-                command_timeout=10,
-            )
+            import ssl as ssl_mod
+            kwargs = {
+                "min_size": 1,
+                "max_size": 5,
+                "command_timeout": 10,
+            }
+            if self._use_ssl:
+                # Create a permissive SSL context for managed Postgres (Neon, Supabase)
+                ctx = ssl_mod.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl_mod.CERT_NONE
+                kwargs["ssl"] = ctx
+            self._pool = await asyncpg.create_pool(self._dsn, **kwargs)
         return self._pool
 
     async def write(self, event: AuditEvent) -> None:

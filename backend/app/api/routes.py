@@ -3,20 +3,22 @@ API route handlers.
 
 Routes:
   GET  /health          — liveness check
-  POST /api/presign     — validate consent + issue Supabase presigned URL
+  POST /api/presign     — validate consent + issue presigned URL (MinIO mode)
+  POST /api/upload      — direct multipart upload (cloud mode, no MinIO)
   POST /api/analyze     — run pipeline, stream SSE
 """
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from app.application.use_cases import AnalyzeUseCase, PresignUseCase
-from app.dependencies import check_env, get_analyze_uc, get_presign_uc
+from app.dependencies import check_env, get_analyze_uc, get_presign_uc, _storage
 from app.domain.models import ConsentRecord, sha256_hash
 
 logger = logging.getLogger(__name__)
@@ -65,8 +67,8 @@ async def presign(
     uc:      Annotated[PresignUseCase, Depends(get_presign_uc)],
 ):
     """
-    Validate consent and return a short-lived Supabase presigned upload URL.
-    The browser then PUTs audio directly to Supabase (this server is bypassed).
+    Validate consent and return a short-lived presigned upload URL.
+    The browser then PUTs audio directly to storage (this server is bypassed).
     Rate-limited: 5 req/min per IP (slowapi, applied at app level).
     """
     client_ip = request.client.host if request.client else "unknown"
@@ -87,6 +89,106 @@ async def presign(
         raise HTTPException(status_code=500, detail="Could not generate upload URL.")
 
     return result
+
+
+# ── /api/upload ───────────────────────────────────────────────────────────────
+
+# Audio-only formats
+_ALLOWED_AUDIO_MIME = {
+    "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp4",
+    "audio/wav", "audio/x-wav", "audio/wave", "audio/aac",
+    "audio/x-aac", "audio/flac", "audio/mp3", "audio/x-m4a",
+}
+# Video formats — ffmpeg extracts the audio track
+_ALLOWED_VIDEO_MIME = {
+    "video/mp4", "video/quicktime", "video/x-msvideo",
+    "video/webm", "video/x-matroska",
+}
+_ALLOWED_MIME = _ALLOWED_AUDIO_MIME | _ALLOWED_VIDEO_MIME
+
+# Extension map for file naming
+_EXT_MAP = {
+    "audio/webm": "webm", "audio/ogg": "ogg", "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",   "audio/wav": "wav", "audio/x-wav": "wav",
+    "audio/wave": "wav",  "audio/aac": "aac", "audio/x-aac": "aac",
+    "audio/flac": "flac", "audio/mp3": "mp3", "audio/x-m4a": "m4a",
+    "video/mp4": "mp4",   "video/quicktime": "mov",
+    "video/x-msvideo": "avi", "video/webm": "webm",
+    "video/x-matroska": "mkv",
+}
+
+# Max upload size: 50MB (generous for 45s audio)
+_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+@router.post("/api/upload", tags=["api"])
+async def upload(
+    request: Request,
+    file: UploadFile = File(...),
+    consent_essential: bool = Form(True),
+    consent_analytics: bool = Form(False),
+):
+    """
+    Direct multipart file upload for cloud deployment (no MinIO/S3).
+    Accepts the audio file, validates it, saves to local temp storage,
+    and returns a file_key for use with /api/analyze.
+
+    This replaces the presign → PUT flow when running without object storage.
+    """
+    client_ip = request.client.host if request.client else "unknown"
+    ip_hash   = sha256_hash(client_ip)
+
+    # ── Consent validation ────────────────────────────────────────────────
+    if not consent_essential:
+        raise HTTPException(
+            status_code=422,
+            detail="Essential processing consent is required."
+        )
+
+    # ── MIME type validation ──────────────────────────────────────────────
+    mime_type = (file.content_type or "").split(";")[0].strip().lower()
+    if mime_type not in _ALLOWED_MIME:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type '{mime_type}'. Please upload an audio file."
+        )
+
+    # ── Read and size-check ───────────────────────────────────────────────
+    data = await file.read()
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({len(data) / 1024 / 1024:.1f}MB). Max is 50MB."
+        )
+
+    if len(data) == 0:
+        raise HTTPException(status_code=422, detail="Empty file uploaded.")
+
+    # ── Save to storage ───────────────────────────────────────────────────
+    ext = _EXT_MAP.get(mime_type, "bin")
+    file_key = f"audio/{uuid.uuid4().hex}.{ext}"
+
+    storage = _storage()
+    await storage.save_file(file_key, data)
+
+    # ── Audit consent ─────────────────────────────────────────────────────
+    from app.dependencies import _audit
+    from app.domain.models import AuditEvent, AuditEventType
+
+    await _audit().write(
+        AuditEvent(
+            event_type    = AuditEventType.CONSENT_GIVEN,
+            file_key_hash = sha256_hash(file_key),
+            ip_hash       = ip_hash,
+            metadata      = {
+                "analytics_consent": consent_analytics,
+                "mime_type": mime_type,
+                "size_bytes": len(data),
+            },
+        )
+    )
+
+    return {"file_key": file_key, "message": "Upload successful"}
 
 
 # ── /api/analyze ──────────────────────────────────────────────────────────────
