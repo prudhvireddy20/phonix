@@ -143,6 +143,31 @@ All services communicate over a single Docker bridge network (`phonix`). No serv
          ↳ SSE: {"type": "done"}
 ```
 
+### 4.5 Sample Audio Demo Flow
+
+To eliminate friction for evaluators and first-time users, the app provides a zero-effort demo path:
+
+```
+1. User clicks "Try with a sample recording" button
+2. Browser → GET /api/sample-audio → FastAPI
+   • espeak-ng generates TTS audio of "The North Wind and the Sun" passage
+   • Audio converted to 16 kHz mono WAV via ffmpeg
+   • Result cached in memory (generated only once per server lifetime)
+   • Returns audio/wav response
+3. Browser auto-selects matching reference passage
+4. Normal flow continues: consent → upload → analyze → results
+```
+
+**Pre-loaded passages** (selectable in the UI):
+
+| Passage | Words | Theme |
+|---|---|---|
+| The North Wind 🌬️ | ~70 | Classic phonetics passage (matches sample audio) |
+| Technology 🤖 | ~65 | AI and modern tech |
+| Mountain Path 🏔️ | ~70 | Nature and scenery |
+
+Selecting a passage auto-fills the reference text textarea.
+
 ### 4.4 SSE Event Schema
 
 | Event Type | Payload | Description |
@@ -225,11 +250,12 @@ idle → consent → running → done
 
 | Component | Purpose |
 |---|---|
-| `page.tsx` | Phase state machine, layout orchestration |
-| `UploadZone` | Drag-and-drop / file picker with audio validation |
+| `page.tsx` | Phase state machine, layout orchestration, passage selector |
+| `privacy/page.tsx` | Dedicated DPDP 2023 privacy policy page (`/privacy`) |
+| `UploadZone` | Drag-and-drop / file picker + "Try with sample" button |
 | `ConsentDialog` | DPDP two-checkbox consent modal (essential + analytics) |
 | `AnalyzingScreen` | Loading animation during pipeline execution |
-| `ResultsView` | Score ring, word highlights, feedback display |
+| `ResultsView` | Score ring, word highlights, feedback display, report download |
 | `ScoreRing` | Animated circular score indicator (0–100) |
 | `WordHighlight` | Colour-coded word-by-word pronunciation display |
 | `FeedbackPanel` | Streaming LLM coaching text with typewriter effect |
@@ -252,6 +278,7 @@ idle → consent → running → done
 | Path | Upstream | Purpose |
 |---|---|---|
 | `/` | `frontend:3000` | Next.js SPA |
+| `/privacy` | `frontend:3000` | DPDP privacy policy page |
 | `/api/*` | `api:8000` | FastAPI endpoints |
 | `/health` | `api:8000` | Liveness check |
 | `/storage/*` | `minio:9000` | Presigned audio uploads |
@@ -325,6 +352,7 @@ Stripped-down stack for 1 GB RAM VPS (UpCloud):
 | **Audit Trail** | Every stage writes to `audit_log`: CONSENT → UPLOAD → ANALYSIS → DELETED. |
 | **Sub-processors** | OpenRouter/LLM for text feedback only. No sub-processor for audio or storage. |
 | **User Notice** | Results page shows: "Your audio has been deleted from our servers." |
+| **Privacy Policy** | Dedicated `/privacy` page covering all DPDP requirements: data collection, processing flow, consent, residency, sub-processors, security, user rights. Linked from footer and consent dialog. |
 
 ---
 
