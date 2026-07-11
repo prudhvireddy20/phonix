@@ -75,6 +75,10 @@ export default function ConsentDialog({ onAccept, onCancel }: Props) {
           <p className="consent-note">
             You may withdraw consent at any time by contacting us. Refusing optional analytics
             has no effect on your pronunciation feedback.
+            Read our full{" "}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="consent-link">
+              Privacy Policy
+            </a>.
           </p>
           <button className="consent-btn" onClick={handleSubmit}>
             I understand — analyse my recording
@@ -210,6 +214,8 @@ export default function ConsentDialog({ onAccept, onCancel }: Props) {
         }
         .consent-btn:hover { background: var(--accent-dim); transform: translateY(-1px); }
         .consent-btn:active { transform: translateY(0); }
+        .consent-link { color: var(--accent); text-decoration: none; font-weight: 500; }
+        .consent-link:hover { text-decoration: underline; }
       `}</style>
     </div>
   );

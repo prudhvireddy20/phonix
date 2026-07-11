@@ -270,7 +270,8 @@ export default function HomePage() {
       <footer className="footer">
         <p>
           Audio deleted after analysis &middot; DPDP 2023 compliant &middot;
-          Data in ap-southeast-1
+          Data in ap-southeast-1 &middot;{" "}
+          <a href="/privacy" className="footer-link">Privacy Policy</a>
         </p>
       </footer>
 
@@ -518,6 +519,13 @@ export default function HomePage() {
           position: relative;
           z-index: 1;
         }
+
+        .footer-link {
+          color: var(--accent);
+          text-decoration: none;
+          font-weight: 500;
+        }
+        .footer-link:hover { text-decoration: underline; }
 
         .passage-section {
           display: flex;
