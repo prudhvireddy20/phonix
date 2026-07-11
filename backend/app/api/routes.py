@@ -89,7 +89,7 @@ def _generate_sample_wav() -> bytes:
 
     try:
         subprocess.run(
-            [\"espeak-ng\", \"-v\", \"en-us\", \"-s\", \"120\", \"-p\", \"50\", \"-w\", espeak_path, _SAMPLE_TEXT],
+            ["espeak-ng", "-v", "en-us", "-s", "120", "-p", "50", "-w", espeak_path, _SAMPLE_TEXT],
             check=True, timeout=30, capture_output=True,
         )
         subprocess.run(
