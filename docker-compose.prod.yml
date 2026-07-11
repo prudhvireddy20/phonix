@@ -1,0 +1,102 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# docker-compose.prod.yml — Production deployment for UpCloud VPS
+#
+# Stripped-down stack:
+#   • No MinIO  — uses local temp file storage (direct upload)
+#   • No Postgres container — uses Neon (managed, free tier)
+#   • Whisper tiny model — fits in 1GB RAM
+# ══════════════════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+networks:
+  phonix:
+    driver: bridge
+
+volumes:
+  whisper_cache:    # faster-whisper model cache — survives restarts
+
+services:
+
+  # ── FastAPI backend ────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        WHISPER_MODEL_SIZE: tiny
+    container_name: phonix_api
+    restart: unless-stopped
+    environment:
+      # Postgres (Neon — managed, free)
+      POSTGRES_DSN:          ${POSTGRES_DSN}
+      # No MinIO — using local storage (auto-detected by dependencies.py)
+      # OpenRouter (LLM feedback — optional, scoring works without it)
+      OPENROUTER_API_KEY:    ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL:      ${OPENROUTER_MODEL:-google/gemini-2.5-flash}
+      # Whisper
+      WHISPER_MODEL_SIZE:    tiny
+      WHISPER_DEVICE:        cpu
+      WHISPER_COMPUTE_TYPE:  int8
+      WHISPER_LANGUAGE:      en
+      # App
+      ALLOWED_ORIGINS:       ${ALLOWED_ORIGINS:-http://localhost}
+      PORT:                  8000
+    volumes:
+      - whisper_cache:/root/.cache/huggingface
+    networks:
+      - phonix
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Memory limit to prevent OOM killing the host
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Next.js frontend ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-}
+    container_name: phonix_frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      BACKEND_URL:             http://api:8000
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-}
+      DEPLOY_TARGET:           docker
+      NODE_ENV:                production
+    networks:
+      - phonix
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+  # ── Nginx reverse proxy ────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: phonix_nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - api
+    ports:
+      - "80:80"
+    volumes:
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - phonix
+    deploy:
+      resources:
+        limits:
+          memory: 32M
