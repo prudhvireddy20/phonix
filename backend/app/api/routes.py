@@ -3,18 +3,23 @@ API route handlers.
 
 Routes:
   GET  /health          — liveness check
+  GET  /api/sample-audio — TTS sample audio for demo
   POST /api/presign     — validate consent + issue presigned URL (MinIO mode)
   POST /api/upload      — direct multipart upload (cloud mode, no MinIO)
   POST /api/analyze     — run pipeline, stream SSE
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import subprocess
+import tempfile
 import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from app.application.use_cases import AnalyzeUseCase, PresignUseCase
@@ -56,6 +61,66 @@ async def health():
     if missing:
         return {"status": "degraded", "missing_env": missing}
     return {"status": "ok"}
+
+
+# ── /api/sample-audio ─────────────────────────────────────────────────────────
+
+_SAMPLE_TEXT = (
+    "The North Wind and the Sun were disputing which was the stronger, "
+    "when a traveller came along wrapped in a warm cloak. "
+    "They agreed that the one who first succeeded in making the traveller "
+    "take his cloak off should be considered stronger than the other. "
+    "Then the North Wind blew as hard as he could, but the more he blew "
+    "the more closely did the traveller fold his cloak around him. "
+    "And at last the North Wind gave up the attempt."
+)
+
+_sample_cache: bytes | None = None
+
+
+def _generate_sample_wav() -> bytes:
+    """Generate sample TTS audio using espeak-ng. Result is cached in memory."""
+    global _sample_cache
+    if _sample_cache:
+        return _sample_cache
+
+    espeak_path = tempfile.mktemp(suffix=".wav")
+    final_path  = tempfile.mktemp(suffix=".wav")
+
+    try:
+        subprocess.run(
+            [\"espeak-ng\", \"-v\", \"en-us\", \"-s\", \"120\", \"-p\", \"50\", \"-w\", espeak_path, _SAMPLE_TEXT],
+            check=True, timeout=30, capture_output=True,
+        )
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", espeak_path, "-ar", "16000", "-ac", "1", "-f", "wav", final_path],
+            check=True, timeout=30, capture_output=True,
+        )
+        with open(final_path, "rb") as f:
+            _sample_cache = f.read()
+    finally:
+        for p in [espeak_path, final_path]:
+            try:
+                os.unlink(p)
+            except FileNotFoundError:
+                pass
+
+    return _sample_cache  # type: ignore[return-value]
+
+
+@router.get("/api/sample-audio", tags=["api"])
+async def sample_audio():
+    """Return a TTS-generated sample English speech clip for demo/evaluation."""
+    try:
+        wav_bytes = await asyncio.get_event_loop().run_in_executor(None, _generate_sample_wav)
+        return Response(
+            content=wav_bytes,
+            media_type="audio/wav",
+            headers={"Content-Disposition": 'inline; filename="phonix-sample.wav"'},
+        )
+    except Exception as exc:
+        logger.exception("Sample audio generation failed")
+        raise HTTPException(status_code=500, detail="Could not generate sample audio.")
 
 
 # ── /api/presign ──────────────────────────────────────────────────────────────

@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { Upload, Mic, FileAudio, AlertTriangle } from "lucide-react";
+import { Upload, Mic, FileAudio, AlertTriangle, Sparkles } from "lucide-react";
 import type { AudioMeta } from "../types";
 import { useAudioValidator, type ValidationError } from "../hooks/useAudioValidator";
 
 interface Props {
   onValid: (audio: AudioMeta) => void;
+  onSampleRequest?: () => void;
+  loadingSample?: boolean;
 }
 
-export default function UploadZone({ onValid }: Props) {
+export default function UploadZone({ onValid, onSampleRequest, loadingSample }: Props) {
   const { validate } = useAudioValidator();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -101,6 +103,30 @@ export default function UploadZone({ onValid }: Props) {
         </div>
       )}
 
+      {/* Sample recording button */}
+      {onSampleRequest && !validating && (
+        <>
+          <div className="uz-divider">
+            <span className="uz-divider-line" />
+            <span className="uz-divider-text">or</span>
+            <span className="uz-divider-line" />
+          </div>
+          <button
+            className="uz-sample-btn"
+            onClick={(e) => { e.stopPropagation(); onSampleRequest(); }}
+            disabled={loadingSample}
+            type="button"
+          >
+            {loadingSample ? (
+              <div className="uz-sample-spinner" />
+            ) : (
+              <Sparkles size={16} />
+            )}
+            <span>{loadingSample ? "Loading sample…" : "Try with a sample recording"}</span>
+          </button>
+        </>
+      )}
+
       <style>{`
         .upload-root { display: flex; flex-direction: column; gap: 12px; }
         .upload-zone {
@@ -171,6 +197,56 @@ export default function UploadZone({ onValid }: Props) {
           border-radius: 10px;
           color: var(--bad);
           font-size: 0.87rem;
+        }
+        .uz-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          width: 100%;
+        }
+        .uz-divider-line {
+          flex: 1;
+          height: 1px;
+          background: var(--border);
+        }
+        .uz-divider-text {
+          font-size: 0.75rem;
+          color: var(--muted);
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+        }
+        .uz-sample-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          width: 100%;
+          padding: 14px 20px;
+          background: var(--panel);
+          border: 1px dashed var(--accent);
+          border-radius: 12px;
+          color: var(--accent);
+          cursor: pointer;
+          font-family: var(--font-body);
+          font-size: 0.9rem;
+          font-weight: 600;
+          transition: all 0.15s;
+        }
+        .uz-sample-btn:hover:not(:disabled) {
+          background: var(--accent-glow);
+          border-style: solid;
+        }
+        .uz-sample-btn:disabled {
+          opacity: 0.6;
+          cursor: wait;
+        }
+        .uz-sample-spinner {
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(245,166,35,0.3);
+          border-top-color: var(--accent);
+          border-radius: 50%;
+          animation: spin 0.7s linear infinite;
         }
       `}</style>
     </div>

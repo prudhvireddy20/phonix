@@ -13,12 +13,39 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 type UIPhase = "idle" | "consent" | "running" | "done" | "error";
 
+const PASSAGES = [
+  {
+    id: "north-wind",
+    title: "The North Wind",
+    icon: "\uD83C\uDF2C\uFE0F",
+    text: "The North Wind and the Sun were disputing which was the stronger, when a traveller came along wrapped in a warm cloak. They agreed that the one who first succeeded in making the traveller take his cloak off should be considered stronger than the other. Then the North Wind blew as hard as he could, but the more he blew the more closely did the traveller fold his cloak around him. And at last the North Wind gave up the attempt.",
+    isSample: true,
+  },
+  {
+    id: "technology",
+    title: "Technology",
+    icon: "\uD83E\uDD16",
+    text: "Technology has transformed the way we communicate, learn, and work together across the world. Artificial intelligence is rapidly becoming an essential tool in our daily lives, powering everything from voice assistants and search engines to medical diagnosis and creative writing. As these systems continue to grow more sophisticated and capable, it becomes increasingly important for everyone to understand both their remarkable capabilities and their significant limitations.",
+    isSample: false,
+  },
+  {
+    id: "nature",
+    title: "Mountain Path",
+    icon: "\uD83C\uDFD4\uFE0F",
+    text: "The mountain path wound through ancient forests where tall pine trees swayed gently in the cool morning breeze. Birds sang their beautiful melodies as golden sunlight filtered through the canopy of leaves, creating intricate patterns of light and shadow on the forest floor below. A small crystal clear stream bubbled peacefully over smooth stones nearby, its gentle sound blending perfectly with the chorus of birdsong that filled the quiet woodland air.",
+    isSample: false,
+  },
+] as const;
+
 export default function HomePage() {
   const [phase, setPhase] = useState<UIPhase>("idle");
   const [pendingAudio, setPendingAudio] = useState<AudioMeta | null>(null);
   const [confirmedAudio, setConfirmedAudio] = useState<AudioMeta | null>(null);
   const [referenceText, setReferenceText] = useState("");
   const [consent, setConsent] = useState<ConsentState | null>(null);
+  const [selectedPassage, setSelectedPassage] = useState<string | null>(null);
+  const [loadingSample, setLoadingSample] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
 
   const { state, run, reset } = useAnalysis(BACKEND_URL);
 
@@ -50,7 +77,50 @@ export default function HomePage() {
     setPendingAudio(null);
     setConfirmedAudio(null);
     setConsent(null);
+    setSelectedPassage(null);
+    setSampleError(null);
   }, [reset]);
+
+  const handlePassageSelect = useCallback((id: string) => {
+    const p = PASSAGES.find((x) => x.id === id);
+    if (!p) return;
+    setSelectedPassage(id);
+    setReferenceText(p.text);
+  }, []);
+
+  const handleSampleRequest = useCallback(async () => {
+    setLoadingSample(true);
+    setSampleError(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/sample-audio`);
+      if (!res.ok) throw new Error("Failed to fetch sample audio");
+      const blob = await res.blob();
+      const file = new File([blob], "phonix-sample.wav", { type: "audio/wav" });
+      const objectUrl = URL.createObjectURL(blob);
+
+      // Measure duration
+      const dur = await new Promise<number>((resolve, reject) => {
+        const el = document.createElement("audio");
+        el.src = objectUrl;
+        el.onloadedmetadata = () => resolve(el.duration);
+        el.onerror = () => reject(new Error("Cannot decode sample"));
+      });
+
+      // Auto-select the North Wind passage (matches the sample)
+      const samplePassage = PASSAGES.find((p) => p.isSample);
+      if (samplePassage) {
+        setSelectedPassage(samplePassage.id);
+        setReferenceText(samplePassage.text);
+      }
+
+      const audio: AudioMeta = { file, durationSeconds: dur, objectUrl };
+      handleValidAudio(audio);
+    } catch (err) {
+      setSampleError((err as Error).message || "Could not load sample");
+    } finally {
+      setLoadingSample(false);
+    }
+  }, [handleValidAudio]);
 
   // Sync analysis state → UI phase
   const effectivePhase: UIPhase =
@@ -90,7 +160,34 @@ export default function HomePage() {
                 We&apos;ll score your pronunciation phoneme-by-phoneme.
               </p>
 
-              <UploadZone onValid={handleValidAudio} />
+              {/* Passage selector */}
+              <div className="passage-section">
+                <h3 className="passage-heading">Choose a passage to read</h3>
+                <div className="passage-cards">
+                  {PASSAGES.map((p) => (
+                    <button
+                      key={p.id}
+                      className={`passage-card ${selectedPassage === p.id ? "passage-card--active" : ""}`}
+                      onClick={() => handlePassageSelect(p.id)}
+                      type="button"
+                    >
+                      <span className="passage-icon">{p.icon}</span>
+                      <span className="passage-name">{p.title}</span>
+                    </button>
+                  ))}
+                </div>
+                {selectedPassage && (
+                  <div className="passage-preview">
+                    <p>{PASSAGES.find((p) => p.id === selectedPassage)?.text}</p>
+                  </div>
+                )}
+              </div>
+
+              <UploadZone
+                onValid={handleValidAudio}
+                onSampleRequest={handleSampleRequest}
+                loadingSample={loadingSample}
+              />
 
               <div className="ref-section">
                 <label htmlFor="ref-text" className="ref-label">
@@ -422,10 +519,83 @@ export default function HomePage() {
           z-index: 1;
         }
 
+        .passage-section {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .passage-heading {
+          font-family: var(--font-display);
+          font-size: 0.78rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: var(--dim);
+        }
+
+        .passage-cards {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .passage-card {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 10px 16px;
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-family: var(--font-body);
+          font-size: 0.85rem;
+          font-weight: 500;
+          color: var(--body);
+        }
+
+        .passage-card:hover {
+          border-color: var(--accent);
+          background: var(--accent-glow);
+        }
+
+        .passage-card--active {
+          border-color: var(--accent);
+          background: var(--accent-glow);
+          color: var(--accent);
+          font-weight: 600;
+        }
+
+        .passage-icon { font-size: 1rem; }
+
+        .passage-name { white-space: nowrap; }
+
+        .passage-preview {
+          background: var(--panel);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          padding: 14px 16px;
+          font-size: 0.85rem;
+          color: var(--dim);
+          line-height: 1.7;
+          max-height: 130px;
+          overflow-y: auto;
+          animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
         @media (max-width: 520px) {
           .card { padding: 20px; }
           .card-title { font-size: 1.4rem; }
           .rv-score-row { flex-direction: column; align-items: flex-start; }
+          .passage-cards { flex-direction: column; }
+          .passage-card { justify-content: center; }
         }
       `}</style>
     </div>
