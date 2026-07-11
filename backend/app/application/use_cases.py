@@ -117,7 +117,7 @@ class AnalyzeUseCase:
     Audio is deleted immediately after processing (DPDP compliance).
     """
 
-    MIN_DURATION = 1.0    # minimum 1s to reject empty/corrupt files
+    MIN_DURATION = 30.0   # assignment requires minimum 30 seconds
     MAX_DURATION = 50.0   # accept up to ~45s with some jitter headroom
 
     def __init__(
@@ -246,7 +246,7 @@ class AnalyzeUseCase:
                 "type": "error",
                 "message": (
                     f"Audio duration {duration:.1f}s is outside the allowed range. "
-                    f"Please upload a recording up to 45 seconds."
+                    f"Please upload a recording between 30 and 45 seconds."
                 ),
             })
             await self._delete(file_key, file_key_hash, ip_hash)

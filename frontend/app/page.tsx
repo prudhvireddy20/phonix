@@ -86,7 +86,7 @@ export default function HomePage() {
               <div className="card-eyebrow">Step 1 of 3</div>
               <h1 className="card-title">Upload your recording</h1>
               <p className="card-desc">
-                Speak up to 45 seconds of English, then upload the file.
+                Read 30 to 45 seconds of English aloud, then upload the file.
                 We&apos;ll score your pronunciation phoneme-by-phoneme.
               </p>
 

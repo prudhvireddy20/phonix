@@ -100,7 +100,7 @@ phonix/
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-org/phonix.git
+git clone https://github.com/prudhvireddy20/phonix.git
 cd phonix
 cp .env .env.local    # optional — docker-compose reads .env by default
 ```
@@ -295,7 +295,7 @@ docker compose exec api python -c \
 | **Consent (§6)** | Two-checkbox modal before any upload. Essential processing required; analytics optional. Neither pre-ticked. |
 | **Purpose limitation (§4)** | Audio used only for pronunciation scoring, then deleted. |
 | **Data minimisation (§8)** | faster-whisper transcribes on-device — audio never sent to a third party. Claude receives text only. |
-| **Retention** | Audio deleted immediately after `AnalyzeUseCase` completes. MinIO lifecycle rule hard-deletes anything older than 1 day as a failsafe. |
+| **Retention** | Audio deleted immediately after `AnalyzeUseCase` completes. MinIO lifecycle rule hard-deletes anything older than 1 day as a failsafe. Duration enforced: 30–45 seconds. |
 | **Data residency** | All data stays on the server running Docker. You choose the country. |
 | **PII in logs** | IP address and file key are SHA-256 hashed before any Postgres write. Raw values never stored. |
 | **Audit trail** | Every pipeline stage writes to `audit_log`: `CONSENT_GIVEN → UPLOAD_STARTED → ANALYSIS_COMPLETE → AUDIO_DELETED`. |

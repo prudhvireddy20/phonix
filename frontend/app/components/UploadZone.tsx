@@ -83,7 +83,7 @@ export default function UploadZone({ onValid }: Props) {
         <p className="uz-sub">
           {validating
             ? "Measuring duration and format"
-            : "or click to browse — WAV, MP3, M4A, OGG, WebM, FLAC, MP4, MOV · up to 45 seconds"}
+            : "or click to browse — WAV, MP3, M4A, OGG, WebM, FLAC, MP4, MOV · 30–45 seconds"}
         </p>
 
         {!validating && (

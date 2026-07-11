@@ -31,7 +31,7 @@ const ALLOWED_VIDEO_MIME = new Set([
 
 const ALLOWED_MIME = new Set([...ALLOWED_AUDIO_MIME, ...ALLOWED_VIDEO_MIME]);
 
-const MIN_DURATION = 1;
+const MIN_DURATION = 30;
 const MAX_DURATION = 45;
 // 200 MB ceiling — video/mp4 files are much larger than pure audio
 const MAX_BYTES = 200 * 1024 * 1024;
@@ -94,7 +94,7 @@ export function useAudioValidator() {
             URL.revokeObjectURL(objectUrl);
             resolve({
               kind: "duration",
-              message: `Recording must be up to 45 seconds. Yours is ${Math.round(dur)}s.`,
+              message: `Recording must be 30–45 seconds. Yours is ${Math.round(dur)}s.`,
               actual: dur,
             });
             return;
